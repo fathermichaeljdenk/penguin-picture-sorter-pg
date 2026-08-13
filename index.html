@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1c7c72">
+    <meta name="description" content="Clean duplicate photos and place unknown-date photos into dated stacks.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Photo Cleanup">
+    <title>Photo Cleanup Board</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>Photo Cleanup Board</h1>
+          <p>Unknown-date photos in the center. Dated stacks around them.</p>
+        </div>
+        <div class="counts" aria-label="Cleanup counts">
+          <div><strong id="knownCount">0</strong><span>Dated</span></div>
+          <div><strong id="unknownCount">0</strong><span>Unknown</span></div>
+          <div><strong id="duplicateCount">0</strong><span>Duplicates</span></div>
+        </div>
+      </header>
+
+      <main>
+        <section id="dashboardView" class="setup-view">
+          <div class="intro">
+            <h2>Project Dashboard</h2>
+            <p>Start fresh, continue saved work, or bring in a project file.</p>
+            <div class="setup-actions">
+              <button id="newProjectButton" class="primary" type="button">New Project</button>
+              <button id="dashboardRestoreButton" class="secondary hidden" type="button">Continue Saved Project</button>
+              <label class="file-button secondary">
+                <input id="projectImportInput" type="file" accept="application/json,.json">
+                Import Project File
+              </label>
+              <button id="dashboardClearButton" class="ghost hidden" type="button">Clear All Saved Projects</button>
+            </div>
+            <div id="dashboardProjectList" class="project-list" aria-label="Saved projects"></div>
+          </div>
+        </section>
+
+        <section id="setupView" class="setup-view hidden">
+          <div class="intro">
+            <h2>Choose Your Photos</h2>
+            <p>Original files are never changed. The app creates JPEG working copies and saves results into a new output folder.</p>
+            <div class="setup-actions">
+              <label class="file-button">
+                <input id="fileInput" type="file" accept="image/*,.heic,.heif" multiple>
+                Choose Photos
+              </label>
+              <button id="changePhotosButton" class="secondary hidden" type="button">Choose Different Photos</button>
+              <button id="restoreProjectButton" class="secondary hidden" type="button">Restore Saved Project</button>
+              <button id="clearProjectButton" class="ghost hidden" type="button">Delete Current Saved Project</button>
+            </div>
+            <div class="timeline-settings" aria-label="Timeline settings">
+              <label>
+                <span>Start Year</span>
+                <input id="timelineStartInput" type="number" min="1800" max="2200" placeholder="Auto">
+              </label>
+              <label>
+                <span>End Year</span>
+                <input id="timelineEndInput" type="number" min="1800" max="2200" placeholder="Auto">
+              </label>
+              <label>
+                <span>Stack Style</span>
+                <select id="stackModeSelect">
+                  <option value="auto">Auto</option>
+                  <option value="ranges">8 ranges</option>
+                  <option value="decades">Decades</option>
+                  <option value="years">Years</option>
+                  <option value="seasons">Seasons</option>
+                  <option value="months">Months</option>
+                </select>
+              </label>
+              <label class="check-row">
+                <input id="useModifiedDateInput" type="checkbox">
+                <span>Use file year</span>
+              </label>
+            </div>
+            <div id="loadStatus" class="status">No photos selected.</div>
+            <div id="importSummary" class="status hidden"></div>
+            <div id="duplicateReviewBox" class="duplicate-review hidden">
+              <div class="panel-title">
+                <div>
+                  <h3>Possible Duplicates</h3>
+                  <p id="duplicateReviewStatus">Review copy-like filenames before importing.</p>
+                </div>
+                <button id="prepareReviewedButton" class="primary" type="button">Prepare Reviewed Photos</button>
+              </div>
+              <div id="duplicateReviewList" class="duplicate-review-list"></div>
+            </div>
+            <div id="savedProjectStatus" class="status hidden"></div>
+            <div id="warningBox" class="warning hidden"></div>
+            <div class="setup-actions">
+              <button id="startButton" class="primary" disabled>Start Cleanup</button>
+              <button id="backToDashboardButton" class="ghost" type="button">Dashboard</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="boardView" class="board-view hidden">
+          <div class="board-head">
+            <div>
+              <h2>Cleanup Board</h2>
+              <p id="boardStatus">Drag the center photo into the best dated stack.</p>
+            </div>
+            <div class="board-actions">
+              <button id="undoButton" class="secondary" disabled>Undo</button>
+              <button id="saveProjectButton" class="secondary">Save Project</button>
+              <button id="saveAsProjectButton" class="secondary">Save As</button>
+              <button id="exportProjectButton" class="secondary">Export Project</button>
+              <button id="compareButton" class="secondary">Compare</button>
+              <button id="nextUnknownButton" class="secondary">Next Unknown</button>
+              <button id="removeUnknownButton" class="danger">Remove Photo</button>
+              <button id="finishButton" class="primary">Finish</button>
+            </div>
+          </div>
+
+          <div class="mode-tabs" aria-label="Workflow mode">
+            <button id="sortModeButton" class="mode-tab active" type="button">Sort Unknowns</button>
+            <button id="reviewModeButton" class="mode-tab" type="button">Review Folders</button>
+          </div>
+
+          <div id="boardGrid" class="board-grid" aria-label="Photo cleanup board">
+            <button class="stack-cell" data-slot="0" type="button"></button>
+            <button class="stack-cell" data-slot="1" type="button"></button>
+            <button class="stack-cell" data-slot="2" type="button"></button>
+            <button class="stack-cell" data-slot="7" type="button"></button>
+            <div id="centerCell" class="center-cell">
+              <img id="centerImage" alt="Unknown-date photo">
+              <div class="center-meta">
+                <span>Unknown Date</span>
+                <strong id="centerName">No unknown photos</strong>
+                <small id="centerProgress">0 sorted, 0 left</small>
+              </div>
+            </div>
+            <button class="stack-cell" data-slot="3" type="button"></button>
+            <button class="stack-cell" data-slot="6" type="button"></button>
+            <button class="stack-cell" data-slot="5" type="button"></button>
+            <button class="stack-cell" data-slot="4" type="button"></button>
+          </div>
+
+          <section id="comparePanel" class="compare-panel hidden" aria-label="Side-by-side photo comparison">
+            <div class="panel-title">
+              <div>
+                <h3 id="compareTitle">Compare</h3>
+                <p id="compareStatus">Choose a stack around the board to compare.</p>
+              </div>
+              <div class="compare-actions">
+                <button id="compareMoveButton" class="primary" type="button">Move Here</button>
+                <button id="compareCloseButton" class="ghost" type="button">Close</button>
+              </div>
+            </div>
+            <div class="compare-grid">
+              <div class="compare-main">
+                <strong>Unknown</strong>
+                <img id="compareUnknownImage" alt="Unknown-date photo being compared">
+                <span id="compareUnknownName"></span>
+              </div>
+              <div class="compare-stack">
+                <strong id="compareStackLabel">Selected Stack</strong>
+                <div id="compareStackGrid" class="compare-stack-grid"></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="folderPanel" class="folder-panel hidden" aria-label="Folder review">
+            <div class="panel-title">
+              <div>
+                <h3 id="folderTitle">Folder Review</h3>
+                <p id="folderStatus">Open a stack to review and move photos.</p>
+              </div>
+              <div class="folder-actions">
+                <button id="folderRenameButton" class="secondary" type="button">Rename Folder</button>
+                <button id="folderCloseButton" class="ghost" type="button">Close</button>
+              </div>
+            </div>
+            <div id="folderGrid" class="folder-grid"></div>
+          </section>
+
+          <section class="removed-panel">
+            <div class="panel-title">
+              <h3>Removed Photos</h3>
+              <span id="removedCount">0 removed</span>
+            </div>
+            <div id="removedGrid" class="removed-grid"></div>
+          </section>
+        </section>
+
+        <section id="exportView" class="export-view hidden">
+          <div class="panel-title">
+            <div>
+              <h2>Ready To Save</h2>
+              <p>Everything below is copied output. Removed duplicates are not saved as photos.</p>
+            </div>
+            <button id="backToBoardButton" class="secondary">Back to Board</button>
+          </div>
+          <div class="export-actions">
+            <button id="saveFolderButton" class="primary">Save New Output Folder</button>
+            <button id="exportProjectFromExportButton" class="secondary">Export Project File</button>
+            <button id="downloadZipButton" class="secondary">Download ZIP</button>
+            <button id="downloadCsvButton" class="secondary">Download CSV</button>
+            <button id="downloadJsonButton" class="secondary">Download JSON</button>
+            <button id="restartButton" class="ghost">Start Over</button>
+          </div>
+          <div id="finalGrid" class="final-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="dragPreview" class="drag-preview hidden" aria-hidden="true"></div>
+    <div id="detailViewer" class="detail-viewer hidden" role="dialog" aria-modal="true" aria-label="Photo detail viewer">
+      <div class="detail-toolbar">
+        <strong id="detailTitle">Photo Detail</strong>
+        <div class="detail-actions">
+          <button id="detailZoomOutButton" class="secondary" type="button">Zoom Out</button>
+          <button id="detailZoomInButton" class="secondary" type="button">Zoom In</button>
+          <button id="detailRotateButton" class="secondary" type="button">Rotate</button>
+          <button id="detailCloseButton" class="ghost" type="button">Close</button>
+        </div>
+      </div>
+      <div class="detail-stage">
+        <img id="detailImage" alt="Detailed photo preview">
+      </div>
+      <div id="detailMeta" class="detail-meta"></div>
+    </div>
+    <script src="app.js?v=19"></script>
+  </body>
+</html>
