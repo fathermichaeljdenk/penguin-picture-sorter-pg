@@ -402,18 +402,7 @@ async function browserJpeg(file, sourceUrl) {
 }
 
 async function serverJpeg(file) {
-  const form = new FormData();
-  form.append("file", file, file.name);
-  const response = await fetch("/api/convert", { method: "POST", body: form });
-  if (!response.ok) {
-    let message = "local converter failed";
-    try {
-      const payload = await response.json();
-      if (payload.error) message = payload.error;
-    } catch {}
-    throw new Error(message);
-  }
-  return await response.blob();
+  throw new Error("No server available for conversion. Please use a standard JPEG/PNG image instead of HEIC.");
 }
 
 function startCleanup() {
@@ -1253,17 +1242,8 @@ function outputEntries() {
 }
 
 async function saveOutputFolder() {
-  const form = new FormData();
-  form.append("manifest", JSON.stringify(manifest(), null, 2));
-  outputEntries().forEach((entry) => form.append("files", entry.photo.jpegBlob, entry.path));
-  const response = await fetch("/api/save-output", { method: "POST", body: form });
-  if (!response.ok) {
-    els.boardStatus.textContent = "Could not save output folder. Make sure you started with Start Photo Cleanup Board.bat.";
-    return;
-  }
-  const result = await response.json();
-  els.boardStatus.textContent = `Saved new output folder: ${result.outputFolder}`;
-  alert(`Saved new output folder:\n${result.outputFolder}`);
+  // Download ZIP directly instead of calling non-existent /api/save-output endpoint
+  await downloadZip();
 }
 
 async function downloadZip() {
