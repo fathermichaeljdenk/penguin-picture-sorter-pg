@@ -1242,7 +1242,7 @@ function outputEntries() {
 }
 
 async function saveOutputFolder() {
-  // Download ZIP directly instead of calling non-existent /api/save-output endpoint
+  // Trigger client-side ZIP download (no server needed)
   await downloadZip();
 }
 
