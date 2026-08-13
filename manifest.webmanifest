@@ -1,0 +1,11 @@
+{
+  "name": "Photo Cleanup Board",
+  "short_name": "Photo Cleanup",
+  "description": "Clean duplicate photos and place unknown-date photos into dated stacks.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5fbfb",
+  "theme_color": "#1c7c72",
+  "icons": []
+}
