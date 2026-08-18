@@ -114,7 +114,8 @@ const els = {
   detailZoomInButton: document.querySelector("#detailZoomInButton"),
   detailRotateButton: document.querySelector("#detailRotateButton"),
   detailCloseButton: document.querySelector("#detailCloseButton"),
-  backToDashboardButton: document.querySelector("#backToDashboardButton")
+  backToDashboardButton: document.querySelector("#backToDashboardButton"),
+  dashboardGooglePhotosButton: document.querySelector("#dashboardGooglePhotosButton")
 };
 
 function init() {
@@ -155,6 +156,7 @@ function init() {
   els.detailZoomInButton.addEventListener("click", () => zoomDetail(1.25));
   els.detailRotateButton.addEventListener("click", rotateDetail);
   els.backToDashboardButton.addEventListener("click", () => showView("dashboard"));
+  els.dashboardGooglePhotosButton.addEventListener("click", loadFromGooglePhotos);
   window.addEventListener("pointerup", cleanupAbandonedDrag);
   window.addEventListener("pointercancel", cleanupAbandonedDrag);
   window.addEventListener("mouseup", cleanupAbandonedDrag);
@@ -264,6 +266,129 @@ function resetWorkingState() {
 function chooseDifferentPhotos() {
   resetSelection();
   els.fileInput.click();
+}
+
+/**
+ * Google Photos import flow.
+ * Prompts the user to sign in to Google, lists albums, lets them pick one,
+ * and imports ALL photos from that album into the cleanup board.
+ */
+async function loadFromGooglePhotos() {
+  if (typeof GooglePhotosAPI === "undefined") {
+    els.loadStatus.textContent = "Google Photos integration not loaded.";
+    return;
+  }
+
+  resetWorkingState();
+  els.startButton.disabled = true;
+  els.changePhotosButton.classList.add("hidden");
+  els.duplicateReviewBox.classList.add("hidden");
+  els.loadStatus.textContent = "Connecting to Google Photos…";
+
+  try {
+    const albums = await GooglePhotosAPI.listAlbums();
+    if (!albums.length) {
+      els.loadStatus.textContent = "No albums found in your Google Photos library.";
+      return;
+    }
+
+    // Let the user pick an album via a simple prompt dialog
+    const albumNames = albums.map((a) => a.title);
+    const selectedTitle = await showAlbumPicker(albumNames);
+    if (!selectedTitle) {
+      els.loadStatus.textContent = "No album selected.";
+      return;
+    }
+
+    const album = albums.find((a) => a.title === selectedTitle);
+    if (!album) {
+      els.loadStatus.textContent = `Album "${selectedTitle}" not found.`;
+      return;
+    }
+
+    els.loadStatus.textContent = `Fetching all photos from album ${album.title}…`;
+    showView("setup");
+
+    const mediaItems = await GooglePhotosAPI.fetchAllPhotosFromAlbum(album.id);
+    els.loadStatus.textContent = `Retrieved ${mediaItems.length} photo(s) from Google Photos. Preparing…`;
+
+    // Convert mediaItems into synthetic File objects so the existing prepareFiles pipeline handles them
+    const importToken = state.importToken + 1;
+    state.importToken = importToken;
+
+    const syntheticFiles = await buildSyntheticFilesFromMediaItems(mediaItems, importToken);
+    const review = analyzeSelectedFiles(syntheticFiles);
+    state.pendingReviewFiles = review.files;
+
+    renderImportSummary(syntheticFiles.length, review);
+
+    if (review.possibleGroups.length) {
+      renderDuplicateReview(review);
+      els.loadStatus.textContent = `${review.files.length} photo(s) ready. ${review.autoSkipped.length} clear duplicate(s) skipped.`;
+      showWarnings(review.autoSkipped.map((f) => `${f.name}: skipped clear duplicate before import`));
+      return;
+    }
+
+    await prepareFiles(review.files, importToken, review.autoSkipped);
+  } catch (error) {
+    els.loadStatus.textContent = `Google Photos import failed: ${error.message || "unknown error"}`;
+    console.error("[Google Photos import]", error);
+  }
+}
+
+/**
+ * Simple album picker — uses window.prompt() so no extra UI markup is needed.
+ * Returns the selected album title, or empty string if cancelled.
+ */
+function showAlbumPicker(albumTitles) {
+  return new Promise((resolve) => {
+    const defaultChoice = albumTitles[0] || "";
+    const input = window.prompt(
+      `Choose a Google Photos album to import.\n\nType the full album name exactly:\n\n${albumTitles.slice(0, 20).join("\n")}${albumTitles.length > 20 ? `\n…and ${albumTitles.length - 20} more` : ""}`,
+      defaultChoice
+    );
+    resolve(input ? input.trim() : "");
+  });
+}
+
+/**
+ * Downloads each mediaItem's baseUrl as a JPEG and wraps it into a synthetic File
+ * compatible with the existing preparePhoto() pipeline.
+ */
+async function buildSyntheticFilesFromMediaItems(mediaItems, importToken) {
+  const files = [];
+  for (let i = 0; i < mediaItems.length; i++) {
+    if (importToken !== state.importToken) return files;
+    const item = mediaItems[i];
+    try {
+      // Google PhotosbaseUrl supports =d for JPEG download; we use a known-safe quality parameter
+      const downloadUrl = item.baseUrl + "=d";
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const fileName = item.filename || `gp_photo_${i + 1}.jpg`;
+      const file = new File([blob], fileName, { type: "image/jpeg", lastModified: new Date(item.creationTime || Date.now()).getTime() });
+      files.push(file);
+    } catch (err) {
+      console.warn(`Failed to download ${item.filename || i}:`, err.message || err);
+    }
+  }
+  return files;
+}
+
+function resetSelection() {
+  state.importToken += 1;
+  resetWorkingState();
+  els.fileInput.value = "";
+  els.loadStatus.textContent = "No photos selected.";
+  els.importSummary.classList.add("hidden");
+  els.importSummary.innerHTML = "";
+  els.startButton.disabled = true;
+  els.changePhotosButton.classList.add("hidden");
+  els.duplicateReviewBox.classList.add("hidden");
+  els.duplicateReviewList.innerHTML = "";
+  els.warningBox.classList.add("hidden");
+  updateCounts();
 }
 
 function analyzeSelectedFiles(files) {
